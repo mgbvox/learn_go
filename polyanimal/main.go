@@ -3,11 +3,10 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"os"
 	"reflect"
 	"strings"
+	"unicode"
 )
 
 type Animal interface {
@@ -58,28 +57,49 @@ func (c Snake) Move() {
 func prompt(args ...string) string {
 	var msg string
 	quitseq := "ctrl+c"
+	helpseq := "h"
+	helptxt := ""
 	terminus := ">"
-	switch len(args) {
-	case 1:
-		msg = args[0]
-	case 2:
-		msg = args[0]
-		quitseq = args[1]
+
+	for idx, arg := range args {
+		if arg != "" {
+			switch idx {
+			case 0:
+				msg = arg
+			case 1:
+				quitseq = arg
+			case 2:
+				helpseq = arg
+			case 3:
+				helptxt = arg
+			case 4:
+				terminus = arg
+
+			}
+		}
+
 	}
 
-	formatted := strings.TrimLeft(fmt.Sprintf("%s (%s to quit) %s ", msg, quitseq, terminus), " ")
+	formatted := strings.TrimLeft(fmt.Sprintf("%s (%s to quit, %s for help) %s ", msg, quitseq, helpseq, terminus), " ")
 	fmt.Print(formatted)
 	scn := bufio.NewScanner(os.Stdin)
 	result := ""
 	if scn.Scan() {
 		inp := scn.Text()
 		clean := strings.Trim(strings.ToLower(inp), " ")
-		if clean == quitseq && quitseq != "" {
-			fmt.Println("Quitting")
-			os.Exit(0)
-		} else {
+		switch clean {
+		case quitseq:
+			if quitseq != "" {
+				fmt.Println("Quitting")
+				os.Exit(0)
+			}
+		case helpseq:
+			fmt.Println(helptxt)
+			return prompt(args...)
+		default:
 			result = clean
 		}
+
 	}
 	return result
 }
@@ -102,9 +122,25 @@ func makeAnimal(name, animalType string, animap *map[string]Animal) {
 
 }
 
+func Map[T any](vs []T, f func(T) T) []T {
+	vsm := make([]T, len(vs))
+	for i, v := range vs {
+		vsm[i] = f(v)
+	}
+	return vsm
+}
+
+func Title(s string) string {
+	runes := []rune(s)
+	firstUpper := []rune{unicode.ToUpper(runes[0])}
+	rest := Map(runes[1:], unicode.ToLower)
+	all := append(firstUpper, rest...)
+	return string(all)
+
+}
+
 func doMethod(a Animal, command string) {
-	caser := cases.Title(language.AmericanEnglish)
-	methodName := caser.String(command)
+	methodName := Title(command)
 	method := reflect.ValueOf(a).MethodByName(methodName)
 	if method.IsValid() {
 		method.Call(nil)
@@ -118,12 +154,22 @@ func invokeAnimal(name, command string, animap *map[string]Animal) {
 	doMethod(animal, command)
 }
 
+func printAnimals(animals *map[string]Animal) {
+	if len(*animals) > 0 {
+		fmt.Println("Animals: ")
+	}
+	for k, v := range *animals {
+		fmt.Println(k, "->", reflect.TypeOf(v))
+	}
+}
+
 func main() {
 
 	animals := make(map[string]Animal)
 
 	for {
-		inp := strings.Split(prompt("command", "q"), " ")
+
+		inp := strings.Split(prompt("command", "q", "h", "Sample Commands: newanimal <name> <cow|bird|snake> | query <name> <eat|move|speak>"), " ")
 		if len(inp) != 3 {
 			fmt.Println("Must provide three whitespace-separated commands, e.g. 'newanimal bob cow'")
 		} else {
@@ -135,6 +181,7 @@ func main() {
 			switch mode {
 			case "newanimal":
 				makeAnimal(name, command, &animals)
+				printAnimals(&animals)
 			case "query":
 				invokeAnimal(name, command, &animals)
 			default:
